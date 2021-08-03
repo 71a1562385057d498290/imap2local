@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!--
+  ~ Project: imap2local
+  ~
+  ~ Copyright (c) Attila Kovari
+  ~ All rights reserved.
+  ~
+  ~ MIT License
+  ~
+  ~ Permission is hereby granted, free of charge, to any person obtaining a copy
+  ~ of this software and associated documentation files (the "Software"), to deal
+  ~ in the Software without restriction, including without limitation the rights
+  ~ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  ~ copies of the Software, and to permit persons to whom the Software is
+  ~ furnished to do so, subject to the following conditions:
+  ~
+  ~ The above copyright notice and this permission notice shall be included in all
+  ~ copies or substantial portions of the Software.
+  ~
+  ~ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  ~ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  ~ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  ~ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  ~ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  ~ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  ~ SOFTWARE.
+  -->
+
+<project name="imap2local" default="all">
+
+    <!-- get current version -->
+    <property file="${basedir}/version.properties"/>
+    <property name="version" value="${version.major}.${version.minor}.${version.build}"/>
+
+    <property name="output.dir" value="${basedir}/out/production"/>
+    <property name="output.build.dir" value="${output.dir}/build/${ant.project.name}"/>
+    <property name="output.artifact.dir" value="${output.dir}/artifact/${ant.project.name}"/>
+    <property name="output.deploy.dir" value="${output.dir}/deploy"/>
+
+    <fileset id="lib.dir" dir="${basedir}/lib"/>
+    <fileset id="resources.dir" dir="${basedir}/resources"/>
+
+    <path id="source.dir">
+        <dirset dir="${basedir}">
+            <include name="src"/>
+        </dirset>
+    </path>
+
+    <!-- compiler options -->
+    <property name="compiler.debug" value="on"/>
+    <property name="compiler.generate.no.warnings" value="off"/>
+    <property name="compiler.args" value="-encoding UTF-8 -source 8 -target 8"/>
+    <property name="compiler.max.memory" value="550m"/>
+
+    <patternset id="compiler.resources">
+        <exclude name="**/?*.java"/>
+        <exclude name="**/?*.class"/>
+    </patternset>
+
+    <!-- classpath -->
+    <path id="classpath">
+        <fileset dir="lib">
+            <include name="**/*.jar"/>
+        </fileset>
+    </path>
+
+    <pathconvert property="jar.lib.classpath" pathsep=" ">
+        <path refid="classpath"/>
+        <mapper>
+            <chainedmapper>
+                <flattenmapper/>
+                <globmapper from="*.jar" to="lib/*.jar"/>
+            </chainedmapper>
+        </mapper>
+    </pathconvert>
+
+    <!-- targets -->
+    <target name="all" depends="clean, compile, build, build.jar, artifact, deploy" description="build all"/>
+
+    <target name="clean" description="cleanup">
+        <delete dir="${output.dir}"/>
+    </target>
+
+    <target name="compile" depends="clean" description="compile">
+        <mkdir dir="${output.build.dir}"/>
+        <javac destdir="${output.build.dir}" debug="${compiler.debug}" nowarn="${compiler.generate.no.warnings}"
+               memorymaximumsize="${compiler.max.memory}" fork="true" includeantruntime="false">
+
+            <compilerarg line="${compiler.args}"/>
+            <classpath refid="classpath"/>
+            <src refid="source.dir"/>
+        </javac>
+        <!-- copy extra resources -->
+        <copy todir="${output.build.dir}">
+            <fileset dir="${basedir}/src">
+                <patternset refid="compiler.resources"/>
+                <type type="file"/>
+            </fileset>
+        </copy>
+    </target>
+
+    <target name="build" depends="clean, compile" description="build">
+        <copy file="${basedir}/LICENSE" todir="${output.build.dir}"/>
+        <antcall target="next.build.number"/>
+    </target>
+
+    <target name="build.jar" depends="build" description="create the JAR file">
+        <echo level="info" message="Creating JAR ${ant.project.name}.jar"/>
+        <jar destfile="${output.artifact.dir}/${ant.project.name}.jar"
+             manifest="${output.build.dir}/META-INF/MANIFEST.MF">
+
+            <fileset dir="${output.build.dir}"/>
+            <manifest>
+                <attribute name="Created-By" value="${java.runtime.version}"/>
+                <attribute name="Implementation-Title" value="${ant.project.name}"/>
+                <attribute name="Implementation-Version" value="${version}"/>
+                <attribute name="Class-Path" value="${jar.lib.classpath}"/>
+            </manifest>
+        </jar>
+    </target>
+
+    <target name="artifact" depends="build.jar" description="create the artifacts and assemble the package">
+        <property name="output.artifact.lib.dir" value="${output.artifact.dir}/lib"/>
+        <mkdir dir="${output.artifact.lib.dir}"/>
+
+        <copy todir="${output.artifact.dir}">
+            <fileset refid="resources.dir"/>
+        </copy>
+        <copy todir="${output.artifact.lib.dir}">
+            <fileset refid="lib.dir"/>
+        </copy>
+
+        <copy file="${basedir}/LICENSE" todir="${output.artifact.dir}"/>
+        <copy file="${basedir}/LICENSE-3RDPARTY" todir="${output.artifact.dir}"/>
+        <echo file="${output.artifact.dir}/VERSION" message="${version}"/>
+    </target>
+
+    <target name="deploy" depends="artifact" description="create final zip and checksum">
+        <property name="output.deploy.zip"
+                  value="${output.deploy.dir}/${ant.project.name}-${version}.zip"/>
+
+        <zip destfile="${output.deploy.zip}" basedir="${output.artifact.dir}"/>
+        <checksum file="${output.deploy.zip}" algorithm="SHA-256" fileext=".sha256" format="MD5SUM"/>
+    </target>
+
+    <target name="next.build.number" description="prepare versioning for the next build">
+        <!-- prepare versioning for the next build -->
+        <propertyfile file="version.properties" comment="Auto-generated file content. Do not change!">
+            <entry key="version.major" type="int" default="1"/>
+            <entry key="version.minor" type="int" default="0"/>
+            <entry key="version.build" type="int" default="0" operation="+"/>
+        </propertyfile>
+    </target>
+</project>
